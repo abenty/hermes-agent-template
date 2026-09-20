@@ -68,8 +68,16 @@ RUN apt-get update && \
 # 2026-09-02 leaves nemo-relay>=0.8.3 unsatisfiable and hard-fails the build.
 # Same trap for cryptography==50.0.0 and h2 4.4.1. Re-read this floor on every
 # bump — it tracks whatever nemo-relay pin the pinned tag carries.
+# INSTILL FORK: patches carried against the pinned HERMES_REF, applied between the
+# clone and the editable install. See patches/README.md. A patch that stops applying
+# after a HERMES_REF bump fails the BUILD here — which is the whole point: the
+# alternative we used before was hand-editing the running container, where the same
+# staleness fails silently at runtime and every redeploy reverts the fix.
+COPY patches/ /opt/instill-patches/
+
 RUN git clone --depth 1 --branch ${HERMES_REF} https://github.com/NousResearch/hermes-agent.git /opt/hermes-agent && \
     cd /opt/hermes-agent && \
+    for p in /opt/instill-patches/*.patch; do [ -e "$p" ] || break; echo "== applying $p"; git apply --verbose "$p" || exit 1; done && \
     uv pip install --system --no-cache -e ".[all,messaging,tts-premium,honcho,bedrock,anthropic,edge-tts,hindsight,vision]" && \
     cd /opt/hermes-agent/web && \
     npm install --silent && \
