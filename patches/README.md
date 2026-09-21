@@ -28,31 +28,47 @@ change and nothing else, and it announces its own staleness by failing to apply.
 
 ## Current patches
 
+Both are written against `v2026.9.11` and filed upstream; delete a file once a
+release carries it.
+
 ### 0001-webhook-delivery-mirror.patch
 
-Written against `v2026.9.11`. Filed upstream; delete this file once a release
-carries it.
+Upstream: NousResearch/hermes-agent#117199.
 
 Hermes runs a webhook event in its own conversation, which is the
 prompt-injection sandbox, and then posts the answer into someone's chat. Nothing
-writes that answer into the receiving chat's transcript, so the agent there has
-no record of what it sent. A follow-up like "make that shorter" has nothing to
-resolve against, and the model picks the nearest plausible thing in its own
-history instead. We saw it shorten an unrelated month-old message.
+wrote that answer into the receiving chat's transcript, so the agent there had
+no record of what it sent, and a follow-up like "make that shorter" had nothing
+to resolve against.
 
-The `send_message` tool already mirrors, and cron mirrors when
-`cron.mirror_delivery` is set. Webhook delivery was the one path that did not.
+The patch mirrors after a successful send, as `role="user"` with a text label
+(an assistant-role mirror replays as a real turn and breaks strict-alternation
+providers, upstream #2221), with `user_id=None` (the originating turn's user is
+`webhook:<route>`, which matches no session in the target chat).
 
-The patch captures the send result and mirrors only when the send succeeded. It
-mirrors as `role="user"`, because an assistant-role mirror replays as a real turn
-and produces assistant-to-assistant pairs that break strict-alternation
-providers (upstream #2221). Authorship is carried by a text label instead. It
-passes `user_id=None`, because the originating turn's user is `webhook:<route>`,
-which matches no session in the target chat and would make the origin scan bail.
+It passes `thread_id=""`, not `None`, when the delivery names no thread. With
+`None` the origin lookup applies no thread filter and returns whichever live
+session for the chat started most recently, which in a DM that has ever had a
+quote-reply is a stale reply thread. That is how the first live test failed on
+2026-09-21: the draft went into a two-day-old thread. `""` matches
+`COALESCE(thread_id, '') = ''` and selects the main conversation.
 
 Security note: for an inbound-webhook route the mirrored text is model output
 derived from untrusted inbound text, written into a chat that may hold the
 recipient's own tools. That is a deliberate and narrow widening of the sandbox,
-and it is the minimum needed for a reply loop whose agent can refer to its own
-drafts. The text is framed as a quoted record and capped in length, which is a
-speed bump rather than a boundary. Do not widen this to raw event payloads.
+the minimum a reply loop needs for its agent to refer to its own drafts. The
+text is framed as a quoted record and capped in length, which is a speed bump
+rather than a boundary. Do not widen this to raw event payloads.
+
+### 0002-buzz-dm-replies-stay-in-conversation.patch
+
+Adds a `dm_threads` option to the Buzz platform (`BUZZ_DM_THREADS` or
+`extra.dm_threads`, default on, so behaviour is unchanged unless set). Buzz
+scopes a session by thread root, in DMs as well as channels, so every
+quote-reply in a 1:1 DM opened a new session that had never seen the rest of the
+conversation. Replying to a draft with the reply button reached a blank session.
+With the option off, a DM reply keeps the main session. The thread root is still
+recorded so the agent's answer anchors under the message it replies to, and the
+quoted text is still passed along. Channels are unaffected.
+
+Instill's provision writes `BUZZ_DM_THREADS=false` to `.env`.
