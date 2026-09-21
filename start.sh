@@ -80,4 +80,37 @@ export HERMES_LAZY_INSTALL_TARGET=/data/.hermes/lazy-packages
 # Dashboard has no respawn supervisor every proxied page 503s until redeploy
 # while /setup and /health stay green. Setting it here would skip that pairing.
 
+# INSTILL FORK: the workspace template. Provision runs from
+# /opt/instill-workspace-template, which lives on the container and so vanished on
+# every redeploy. The template now lives on the volume and this links it back at
+# each start. With INSTILL_TEMPLATE_TOKEN set (read-only, that one repo) a copy
+# that is not yet a git checkout is cloned fresh. An existing checkout is never
+# updated here: what runs must be what provision installed, so updating stays a
+# deliberate step (/app/update-template.sh pulls, then provisions). The token
+# reaches git through GIT_CONFIG_* env, never argv, so it is not in /proc cmdline.
+# Nothing in this block may stop the gateway starting.
+instill_template() {
+  TPL=/data/instill-workspace-template
+  if [ ! -d "$TPL/.git" ] && [ -n "${INSTILL_TEMPLATE_TOKEN:-}" ]; then
+    rm -rf "$TPL.new"
+    if GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=http.extraheader \
+       GIT_CONFIG_VALUE_0="AUTHORIZATION: basic $(printf 'x-access-token:%s' "$INSTILL_TEMPLATE_TOKEN" | base64 | tr -d '\n')" \
+       GIT_TERMINAL_PROMPT=0 timeout 60 git clone -q --branch "${INSTILL_TEMPLATE_BRANCH:-master}" \
+       "https://github.com/${INSTILL_TEMPLATE_REPO:-abenty/instill-workspace-template}.git" "$TPL.new"; then
+      rm -rf "$TPL.old"
+      if [ -e "$TPL" ]; then mv "$TPL" "$TPL.old"; fi
+      mv "$TPL.new" "$TPL"
+      echo "instill: workspace template cloned ($(git -C "$TPL" log --oneline -1))"
+    else
+      rm -rf "$TPL.new"
+      echo "instill: template clone failed; keeping the copy on the volume" >&2
+    fi
+  fi
+  if [ -d "$TPL" ] && { [ -L /opt/instill-workspace-template ] || [ ! -e /opt/instill-workspace-template ]; }; then
+    ln -sfn "$TPL" /opt/instill-workspace-template
+    echo "instill: /opt/instill-workspace-template -> $TPL"
+  fi
+}
+instill_template || echo "instill: template step failed; continuing" >&2
+
 exec python /app/server.py

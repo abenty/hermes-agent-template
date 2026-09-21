@@ -28,12 +28,12 @@ change and nothing else, and it announces its own staleness by failing to apply.
 
 ## Current patches
 
-Both are written against `v2026.9.11` and filed upstream; delete a file once a
-release carries it.
+Both are written against `v2026.9.11` and are ours to carry. They were offered
+upstream and those pull requests were closed on 2026-09-21, so no release will
+pick them up: re-check both on every `HERMES_REF` bump. The build fails with the
+rejected hunk if either stops applying.
 
 ### 0001-webhook-delivery-mirror.patch
-
-Upstream: NousResearch/hermes-agent#117199.
 
 Hermes runs a webhook event in its own conversation, which is the
 prompt-injection sandbox, and then posts the answer into someone's chat. Nothing

@@ -38,6 +38,32 @@ and obvious. After a rebase that moves `HERMES_REF`, rebuild once and read the
 log: a patch written against the old ref will fail to apply and stop the build.
 That failure is the point of keeping patches as files.
 
+## The workspace template
+
+Instill's provision runs from `/opt/instill-workspace-template`. That path used
+to be a copy on the container, so every redeploy deleted it and someone had to
+push the files back by hand. The template now lives on the volume at
+`/data/instill-workspace-template`, and `start.sh` links it back at every start.
+
+If the service has `INSTILL_TEMPLATE_TOKEN` (a fine-grained GitHub token with
+read-only Contents access to that one repository), `start.sh` also clones the
+template the first time it finds a copy that is not a git checkout. It never
+updates an existing checkout at startup, because what runs should be what
+provision installed. A failed clone keeps the existing copy, and nothing in the
+step can stop the gateway from starting.
+
+To update the template on a running instance:
+
+```sh
+railway ssh -s "Hermes Agent" "sh /app/update-template.sh"
+```
+
+That fetches the tip of `master`, resets the checkout to it and runs provision.
+Pass `--no-provision` to fetch without installing. The token reaches git
+through `GIT_CONFIG_*` environment variables rather than the command line, so it
+does not show up in the process list, and the agent's own shell starts from an
+empty environment and cannot read it.
+
 ## Deployment
 
 Railway service "Hermes Agent" in project `hermes-bluetuffy` builds from this

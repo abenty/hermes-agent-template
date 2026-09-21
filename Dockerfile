@@ -139,7 +139,8 @@ RUN mkdir -p /data/.hermes
 COPY server.py /app/server.py
 COPY templates/ /app/templates/
 COPY start.sh /app/start.sh
-RUN chmod +x /app/start.sh
+COPY update-template.sh /app/update-template.sh
+RUN chmod +x /app/start.sh /app/update-template.sh
 
 ENV HOME=/data
 ENV HERMES_HOME=/data/.hermes
