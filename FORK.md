@@ -59,7 +59,15 @@ railway ssh -s "Hermes Agent" "sh /app/update-template.sh"
 ```
 
 That fetches the tip of `master`, resets the checkout to it and runs provision.
-Pass `--no-provision` to fetch without installing. The token reaches git
+Pass `--no-provision` to fetch without installing. Provision runs detached and
+logs to `/data/.hermes/logs/provision-<time>.log` (`provision-last.log` points
+at the newest), so a dropped ssh session no longer kills it halfway. The script
+follows the log and exits 0 only when the last line is `provision: done`. If the
+session drops, check it afterwards:
+
+```sh
+railway ssh -s "Hermes Agent" -- tail -n 1 /data/.hermes/logs/provision-last.log
+``` The token reaches git
 through `GIT_CONFIG_*` environment variables rather than the command line, so it
 does not show up in the process list, and the agent's own shell starts from an
 empty environment and cannot read it.
